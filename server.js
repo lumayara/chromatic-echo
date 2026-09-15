@@ -55,7 +55,6 @@ function firstFreeColor(room) {
 
 function roomPlayers(room) {
   const humans = [...room.clients.entries()]
-    .filter(([, c]) => c.color != null)
     .map(([id, c]) => ({ id, name: c.name, color: c.color }));
   const bots = [...room.bots.entries()].map(([id, b]) => ({ id, name: b.name, color: b.color }));
   return [...humans, ...bots];
@@ -136,9 +135,8 @@ function botStep(room) {
       colorToClick = wrong;
     } else colorToClick = expected;
   } else {
-    // adding: bot plays its own color (fallback random)
-    const b = room.bots.get(id);
-    colorToClick = b ? b.color : Math.floor(Math.random() * G.PALETTE.length);
+    // adding: bot picks a random color (colors are free-choice, not identity)
+    colorToClick = Math.floor(Math.random() * G.PALETTE.length);
   }
 
   const r = G.applyClick(g, id, colorToClick);
@@ -394,7 +392,9 @@ function handle(ws, msg) {
 
 function joinRoom(ws, room, name) {
   ws.roomCode = room.code;
-  room.clients.set(ws.clientId, { ws, name: (name || "Player").slice(0, 16), color: null, connected: true });
+  // auto-assign a display color (by first free slot) — purely cosmetic, for the roster
+  const color = firstFreeColor(room);
+  room.clients.set(ws.clientId, { ws, name: (name || "Player").slice(0, 16), color, connected: true });
   send(ws, { t: "joined", code: room.code, clientId: ws.clientId, hostId: room.hostId });
   broadcastState(room);
 }

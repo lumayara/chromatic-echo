@@ -133,14 +133,13 @@
       <div>Room <span class="code" id="roomCode">----</span></div>
       <button class="ghost" id="copyBtn" style="flex:0 0 auto">Copy invite</button>
     </div>
-    <div class="sub">Share the link or code. Pick your color = your sound. 2–8 players.</div>
-    <label id="pickLabel" style="font-size:14px;color:var(--ink);font-weight:700">🎨 Select your color <span style="color:var(--dim);font-weight:400">— it's your note</span></label>
-    <div class="swatches" id="swatches"></div>
-    <div id="botRow" class="row hide" style="margin-top:12px;align-items:center">
+    <div class="sub">Share the link or code. Enter, add bots, and start. 2–8 players.</div>
+    <div id="botRow" class="row hide" style="margin-top:6px;align-items:center">
       <button class="ghost" id="removeBotBtn" style="flex:0 0 auto">– Bot</button>
       <div style="flex:1;text-align:center;font-size:13px;color:var(--dim)">Bots: <b id="botCount">0</b> <span style="font-size:11px">(play solo!)</span></div>
       <button class="ghost" id="addBotBtn" style="flex:0 0 auto">+ Bot 🤖</button>
     </div>
+    <label style="margin-top:10px">Players</label>
     <div class="players" id="lobbyPlayers"></div>
     <div id="settingsRow" style="margin-top:14px">
       <label>Difficulty <span id="diffLock" class="sub" style="display:none;font-size:11px">(host sets)</span></label>
@@ -300,48 +299,31 @@ function handleEvent(m){
 // ============================ Lobby ============================
 function showLobby(){$("entry").classList.add("hide");$("lobby").classList.remove("hide");$("roomCode").textContent=roomCode;}
 function renderLobby(m){
-  if(!$("lobby").classList.contains("hide")===false && roomCode){} // no-op
   if(m.code){roomCode=m.code;$("roomCode").textContent=roomCode;}
-  // swatches
-  const taken={}; m.players.forEach(p=>{if(p.color!=null)taken[p.color]=p.id;});
-  const sw=$("swatches"); sw.innerHTML="";
-  PAL.forEach(c=>{
-    const d=document.createElement("div");
-    d.className="swatch"+(taken[c.id]!=null?(taken[c.id]===clientId?" mine":" taken"):"");
-    d.style.background=c.hex; d.innerHTML=`${c.name}<span class="note">${c.note}</span>`;
-    d.onclick=()=>{ myColor=c.id; sendMsg({t:"pickColor",color:c.id}); tone(c.freq); };
-    sw.appendChild(d);
-  });
-  // players
+  // players roster (colors are auto-assigned, just for telling players apart)
   const lp=$("lobbyPlayers"); lp.innerHTML="";
   m.players.forEach(p=>{
     const col=PAL.find(c=>c.id===p.color);
     const pill=document.createElement("div"); pill.className="pill";
-    pill.innerHTML=`<span class="dot" style="background:${col?col.hex:'#555'}"></span>${p.name}${p.id===m.hostId?' <span class="badge">host</span>':''}`;
+    const you=p.id===clientId?' <span class="badge">you</span>':'';
+    pill.innerHTML=`<span class="dot" style="background:${col?col.hex:'#555'}"></span>${p.name}${p.id===m.hostId?' <span class="badge">host</span>':''}${you}`;
     lp.appendChild(pill);
   });
   const iAmHost=clientId===m.hostId;
   const total=m.players.length;
-  const withColor=m.players.filter(p=>p.color!=null).length;
   const botCount=m.players.filter(p=>p.kind==="bot").length;
   // bot controls (host only)
   $("botRow").classList.toggle("hide",!iAmHost);
   $("botCount").textContent=botCount;
   $("addBotBtn").disabled=total>=8;
   $("removeBotBtn").disabled=botCount<=0;
-  // need >=2 players total AND this host has a color
-  const meHasColor=m.players.some(p=>p.id===clientId&&p.color!=null);
-  $("startBtn").disabled=!(iAmHost&&total>=2&&meHasColor);
-  // dynamic Start button label so the reason it's disabled is obvious
-  if(!meHasColor) $("startBtn").textContent="⬆️ Select your color";
-  else if(iAmHost&&total<2) $("startBtn").textContent="Add a bot or invite a friend";
-  else if(iAmHost) $("startBtn").textContent="Start Game";
+  // start needs >=2 players total
+  $("startBtn").disabled=!(iAmHost&&total>=2);
+  if(iAmHost&&total<2) $("startBtn").textContent="Add a bot or invite a friend";
+  else if(iAmHost) $("startBtn").textContent="▶ Start Game";
   else $("startBtn").textContent="Waiting for host…";
-  // pulse the color prompt until a color is chosen
-  const pl=$("pickLabel");
-  if(pl){ pl.style.color=meHasColor?"var(--ink)":"#f5d20c"; }
   $("hostHint").textContent=iAmHost
-    ?(!meHasColor?"Pick your color first…":(total<2?"Add a bot 🤖 or invite a friend to start…":"Ready! Press Start."))
+    ?(total<2?"Add a bot 🤖 or invite a friend to start…":"Ready! Press Start.")
     :"Waiting for host to start…";
   // settings sync (difficulty + sound pack)
   if(m.settings){

@@ -234,17 +234,16 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
     host.snd({t:"create",name:"Host"});
     const joined=await host.until(m=>m.t==="joined"); const code=joined.code;
     ok(!!code,"room created with code "+code);
-    host.snd({t:"pickColor",color:0});
 
     const guest=client(); await new Promise(r=>guest.on("open",r));
     const gHello=await guest.until(m=>m.t==="hello"); guest.id=gHello.clientId;
     guest.snd({t:"join",code,name:"Guest"});
     await guest.until(m=>m.t==="joined");
-    guest.snd({t:"pickColor",color:1});
 
-    // host sees 2 players in lobby
+    // host sees 2 players in lobby (colors auto-assigned on join — no pickColor step)
     const lob=await host.until(m=>m.t==="lobby"&&m.players.length===2&&m.players.every(p=>p.color!=null));
-    ok(lob.players.length===2,"both players in lobby with colors");
+    ok(lob.players.length===2,"both players auto-joined with colors (no pick step)");
+    ok(lob.players.every(p=>p.color!=null && p.color>=0),"every player has an auto-assigned display color");
 
     // start
     host.snd({t:"start"});
@@ -277,7 +276,6 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
     const sHello=await solo.until(m=>m.t==="hello"); solo.id=sHello.clientId;
     solo.snd({t:"create",name:"Solo"});
     const sJoined=await solo.until(m=>m.t==="joined"); const scode=sJoined.code;
-    solo.snd({t:"pickColor",color:0});
     solo.snd({t:"setSettings",difficulty:"hard",soundPack:"retro"});
     const setLob=await solo.until(m=>m.t==="lobby"&&m.settings&&m.settings.difficulty==="hard");
     ok(setLob.settings.difficulty==="hard"&&setLob.settings.soundPack==="retro","host settings (hard + retro) applied");
