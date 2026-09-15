@@ -299,9 +299,14 @@ function onMsg(m){
 
 function handleEvent(m){
   const ev=m.event;
-  if(ev.colorId>=0 && (ev.kind==="replay_correct"||ev.kind==="add_more"||ev.kind==="turn_complete")){
-    // opponents' notes get the bigger, easier-to-follow flash; your own stay snappy
-    if(m.byId===clientId) flash(ev.colorId); else bigFlash(ev.colorId);
+  // The color that was played: prefer the event's colorId, but fall back to the
+  // server's top-level m.color (turn_complete/add events don't carry colorId).
+  const played = (ev.colorId!=null && ev.colorId>=0) ? ev.colorId
+               : (m.color!=null && m.color>=0) ? m.color : null;
+  const isPlay = ev.kind==="replay_correct"||ev.kind==="add_more"||ev.kind==="turn_complete";
+  if(isPlay && played!=null){
+    // Your own notes already flash locally on tap; flash OPPONENTS' notes here (big + sound)
+    if(m.byId!==clientId) bigFlash(played);
   }
   if(ev.kind==="eliminated"||ev.kind==="eliminated_game_over"){
     buzz();
