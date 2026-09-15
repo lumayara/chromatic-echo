@@ -49,7 +49,7 @@
 
   /* game board */
   #board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:14px 0}
-  .key{aspect-ratio:1;border-radius:18px;position:relative;cursor:pointer;border:none;
+  .key{aspect-ratio:1;border-radius:18px;position:relative;cursor:pointer;border:none;touch-action:manipulation;user-select:none;
     box-shadow:0 8px 0 rgba(0,0,0,.35),inset 0 2px 6px rgba(255,255,255,.25);
     transition:transform .05s,filter .1s,box-shadow .05s;filter:brightness(.82) saturate(.9)}
   .key:active,.key.lit{filter:brightness(1.35) saturate(1.2);transform:translateY(3px);
@@ -134,7 +134,7 @@
       <button class="ghost" id="copyBtn" style="flex:0 0 auto">Copy invite</button>
     </div>
     <div class="sub">Share the link or code. Pick your color = your sound. 2–8 players.</div>
-    <label>Pick your color</label>
+    <label id="pickLabel" style="font-size:14px;color:var(--ink);font-weight:700">🎨 Select your color <span style="color:var(--dim);font-weight:400">— it's your note</span></label>
     <div class="swatches" id="swatches"></div>
     <div id="botRow" class="row hide" style="margin-top:12px;align-items:center">
       <button class="ghost" id="removeBotBtn" style="flex:0 0 auto">– Bot</button>
@@ -332,6 +332,14 @@ function renderLobby(m){
   // need >=2 players total AND this host has a color
   const meHasColor=m.players.some(p=>p.id===clientId&&p.color!=null);
   $("startBtn").disabled=!(iAmHost&&total>=2&&meHasColor);
+  // dynamic Start button label so the reason it's disabled is obvious
+  if(!meHasColor) $("startBtn").textContent="⬆️ Select your color";
+  else if(iAmHost&&total<2) $("startBtn").textContent="Add a bot or invite a friend";
+  else if(iAmHost) $("startBtn").textContent="Start Game";
+  else $("startBtn").textContent="Waiting for host…";
+  // pulse the color prompt until a color is chosen
+  const pl=$("pickLabel");
+  if(pl){ pl.style.color=meHasColor?"var(--ink)":"#f5d20c"; }
   $("hostHint").textContent=iAmHost
     ?(!meHasColor?"Pick your color first…":(total<2?"Add a bot 🤖 or invite a friend to start…":"Ready! Press Start."))
     :"Waiting for host to start…";
@@ -390,8 +398,8 @@ function renderGame(){
   $("modMirror").classList.toggle("hide", !mirrorMe);
   $("modReverse").classList.toggle("hide", state.direction>=0);
   $("modSlowmo").classList.toggle("hide", !(myTurn && state.slowmoActive));
-  // replay button: available on my turn (uses slow-mo speed if bonus active)
-  $("replayBtn").classList.toggle("hide", !myTurn || state.sequence.length===0);
+  // replay button: Easy mode only (a training aid); uses slow-mo speed if bonus active
+  $("replayBtn").classList.toggle("hide", state.difficulty!=="easy" || !myTurn || state.sequence.length===0);
   // enable board only on my turn
   document.querySelectorAll("#board .key").forEach(k=>k.style.pointerEvents=myTurn?"auto":"none");
   // players tray
@@ -406,11 +414,17 @@ function buildBoardOnce(){ if(_boardBuilt)return; buildBoard($("board"),c=>onBoa
 function onBoardClick(c){
   const me=state.players.find(p=>p.id===clientId);
   if(!(state.currentId===clientId && me && me.alive)) return;
+  // guard against touch/click double-fire: drop a duplicate of the SAME key
+  // fired within 130ms (a human can't physically re-tap that fast; a ghost click is ~10-50ms).
+  const now=performance.now();
+  if(_lastClick && _lastClick.cid===c.id && (now-_lastClick.ts)<130) return;
+  _lastClick={cid:c.id, ts:now};
   tone(c.freq); // immediate feedback
   const el=document.querySelector(`#board .key[data-cid="${c.id}"]`);
   if(el){el.classList.add("lit");setTimeout(()=>el.classList.remove("lit"),200);}
   sendMsg({t:"click",color:c.id});
 }
+let _lastClick=null;
 function renderPlayerTray(container){
   container.innerHTML="";
   state.players.forEach(p=>{
@@ -482,7 +496,8 @@ function duelGo(){
   $("duelKeys").querySelectorAll(".key").forEach(k=>k.style.pointerEvents=canPlay?"auto":"none");
   if(!canPlay) $("duelHint").textContent="You're out — watch the survivors duel!";
 }
-function onDuelClick(c){ tone(c.freq); flash(c.id,$("duel")); sendMsg({t:"duelClick",color:c.id}); }
+function onDuelClick(c){ const now=performance.now(); if(_lastDuelClick&&_lastDuelClick.cid===c.id&&(now-_lastDuelClick.ts)<130) return; _lastDuelClick={cid:c.id,ts:now}; tone(c.freq); flash(c.id,$("duel")); sendMsg({t:"duelClick",color:c.id}); }
+let _lastDuelClick=null;
 function handleDuelEvent(m){
   const ev=m.event;
   if(ev.kind==="duel_wrong"&&ev.playerId===clientId){ buzz(); showToast("❌ Missed it!",1500); }
