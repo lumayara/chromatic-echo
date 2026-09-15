@@ -148,7 +148,7 @@ function botStep(room) {
   } else {
     broadcastState(room);
     // continue same bot's turn (next replay step or next add)
-    room.timers.bot = setTimeout(() => botStep(room), 480);
+    room.timers.bot = setTimeout(() => botStep(room), 620);
   }
 }
 

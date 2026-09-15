@@ -103,6 +103,22 @@
     border-radius:18px;padding:18px 26px;opacity:0;transition:all .35s cubic-bezier(.2,1.4,.4,1);pointer-events:none}
   .bonusFloat.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
   .bonusFloat .big2{font-size:44px;display:block;margin-bottom:6px}
+  /* sequence trail — the growing "suitcase" list everyone can watch */
+  #trailWrap{min-height:34px;margin:2px 0 8px}
+  #trail{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .tchip{width:26px;height:26px;border-radius:8px;position:relative;box-shadow:inset 0 1px 3px rgba(255,255,255,.3);
+    transition:transform .12s,box-shadow .12s;opacity:.85}
+  .tchip .ti{position:absolute;bottom:-2px;right:1px;font-size:8px;color:#000a;font-weight:800}
+  .tchip.active{transform:scale(1.35);opacity:1;box-shadow:0 0 12px currentColor,inset 0 1px 3px rgba(255,255,255,.5);z-index:2}
+  .tchip.pending{opacity:.18}
+  .tchip.hiddenchip{background:#2a2f4a!important;color:#2a2f4a!important}
+  .tchip.hiddenchip::after{content:"?";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#6b73a0;font-weight:800;font-size:13px}
+  /* board "someone else is playing" watch mode */
+  #board.watch{position:relative}
+  #board.watch::before{content:"👀 Watch & remember";position:absolute;top:-2px;left:50%;transform:translateX(-50%);
+    background:#3a7bf5;color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;z-index:5;white-space:nowrap}
+  .key.big-flash{filter:brightness(1.6) saturate(1.3)!important;transform:translateY(3px) scale(1.04)!important;
+    box-shadow:0 0 45px currentColor,inset 0 2px 12px rgba(255,255,255,.6)!important}
 </style>
 </head>
 <body>
@@ -112,7 +128,7 @@
 
 <div id="app">
   <h1>Chromatic Echo</h1>
-  <div class="sub">Repeat every color. Add your own. One wrong note and you're out. 🎹</div>
+  <div class="sub">The Suitcase Game with sound: each turn, repeat the whole growing list of colors — then add one. Miss the order and you're out. Last one standing wins. 🎹</div>
 
   <!-- ENTRY -->
   <div id="entry" class="card">
@@ -177,6 +193,7 @@
       <button class="replayBtn hide" id="replayBtn">▶ Replay sequence</button>
     </div>
     <div id="prompt" class="sub">Watch the sequence, then it's someone's turn.</div>
+    <div id="trailWrap"><div id="trail"></div></div>
     <div id="board"></div>
     <div class="players" id="gamePlayers"></div>
   </div>
@@ -282,8 +299,10 @@ function onMsg(m){
 
 function handleEvent(m){
   const ev=m.event;
-  if(ev.colorId>=0 && (ev.kind==="replay_correct"||ev.kind==="add_more"||ev.kind==="turn_complete"))
-    flash(ev.colorId);
+  if(ev.colorId>=0 && (ev.kind==="replay_correct"||ev.kind==="add_more"||ev.kind==="turn_complete")){
+    // opponents' notes get the bigger, easier-to-follow flash; your own stay snappy
+    if(m.byId===clientId) flash(ev.colorId); else bigFlash(ev.colorId);
+  }
   if(ev.kind==="eliminated"||ev.kind==="eliminated_game_over"){
     buzz();
     const p=state.players.find(x=>x.id===ev.eliminatedId);
@@ -354,6 +373,41 @@ function flash(cid,root=document){
   if(col) tone(col.freq);
   if(el){el.classList.add("lit");setTimeout(()=>el.classList.remove("lit"),260);}
 }
+// Bigger, slower flash for opponent turns (easier to follow visually)
+function bigFlash(cid){
+  const el=document.querySelector(`#board .key[data-cid="${cid}"]`);
+  const col=PAL.find(c=>c.id===cid);
+  if(col) tone(col.freq);
+  if(el){el.classList.add("big-flash");setTimeout(()=>el.classList.remove("big-flash"),380);}
+}
+// Render the growing "suitcase" trail. Difficulty controls how much is revealed:
+//  - easy:   always show the whole list (chips lit)
+//  - normal: show what's been recited so far this turn; the rest are hidden "?"
+//  - hard:   hide the whole list ("?") — pure memory
+function renderTrail(myTurn){
+  const t=$("trail"); if(!t) return;
+  const seq=state.sequence, diff=state.difficulty, pos=state.replayPos;
+  t.innerHTML="";
+  if(!seq.length){ $("trailWrap").style.visibility="hidden"; return; }
+  $("trailWrap").style.visibility="visible";
+  seq.forEach((cid,i)=>{
+    const col=PAL.find(c=>c.id===cid);
+    const chip=document.createElement("div");
+    chip.className="tchip";
+    // reveal logic
+    let reveal;
+    if(diff==="easy") reveal=true;
+    else if(diff==="hard") reveal=false;
+    else reveal = i < pos;   // normal: reveal notes already correctly recited this turn
+    if(reveal){ chip.style.background=col?col.hex:"#555"; chip.style.color=col?col.hex:"#555"; }
+    else chip.classList.add("hiddenchip");
+    // highlight the note currently being recited
+    if(i===pos-1) chip.classList.add("active");
+    if(i>=pos && diff!=="easy") chip.classList.add("pending");
+    chip.innerHTML=`<span class="ti">${i+1}</span>`;
+    t.appendChild(chip);
+  });
+}
 function renderGame(){
   if(!state) return;
   buildBoardOnce();
@@ -372,7 +426,10 @@ function renderGame(){
       $("prompt").textContent=`✅ Sequence done! Now add ${state.toAdd} new color${state.toAdd>1?"s":""}.`;
     $("turnHint").textContent="";
   } else {
-    $("prompt").textContent=cur?`Watch ${cur.name} play…`:"…";
+    const doneReplay = state.replayPos>=state.sequence.length;
+    $("prompt").textContent=cur
+      ? (doneReplay ? `👀 ${cur.name} is adding a new color…` : `👀 Watch ${cur.name} recite the sequence — ${state.replayPos}/${state.sequence.length}`)
+      : "…";
   }
   // HUD: combo, modifiers, replay
   const combo = me ? me.streak : 0;
@@ -384,6 +441,10 @@ function renderGame(){
   $("replayBtn").classList.toggle("hide", state.difficulty!=="easy" || !myTurn || state.sequence.length===0);
   // enable board only on my turn
   document.querySelectorAll("#board .key").forEach(k=>k.style.pointerEvents=myTurn?"auto":"none");
+  // watch banner when it's NOT your turn and someone is reciting
+  $("board").classList.toggle("watch", !myTurn && !!cur);
+  // the growing "suitcase" trail everyone can see
+  renderTrail(myTurn);
   // players tray
   renderPlayerTray($("gamePlayers"));
   // timer
